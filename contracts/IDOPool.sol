@@ -1,147 +1,192 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract IDOPool {
-    using SafeERC20 for IERC20;
+import { IUniswapV2Router02 } from "./interfaces/IUniswapV2Router02.sol";
+import { IUniswapV2Factory } from "./interfaces/IUniswapV2Factory.sol";
 
-    struct Timestamps {
-        uint256 startTimestamp;
-        uint256 endTimestamp;
-        uint256 claimTimestamp;
-    }
+contract IDOPool is Ownable {
+	using SafeERC20 for IERC20;
 
-    struct UserInfo {
-        uint256 stakedAmount;
-        uint256 claimedAmount;
-        bool hasClaimed;
-    }
+	struct Timestamps {
+		uint256 startTimestamp;
+		uint256 endTimestamp;
+		uint256 claimTimestamp;
+	}
 
-    struct DEXInfo {
-        address router;
-        address factory;
-    }
+	struct UserInfo {
+		uint256 stakedAmount;
+		uint256 claimedAmount;
+		bool hasClaimed;
+	}
 
-    struct TokenInfo {
-        IERC20 rewardToken;
-        uint256 rewardTokenPrice;
-        IERC20 buyToken;
-        uint256 buyTokenSupply;
-        uint256 softCap;
-        uint256 hardCap;
-    }
+	struct DEXInfo {
+		IUniswapV2Router02 router;
+		IUniswapV2Factory factory;
+	}
 
-    TokenInfo public tokenInfo;
-    Timestamps public timestamps;
-    DEXInfo public dexInfo;
+	struct TokenInfo {
+		IERC20 rewardToken;
+		uint256 rewardTokenPrice;
+		IERC20 buyToken;
+		uint256 buyTokenSupply;
+		uint256 softCap;
+		uint256 hardCap;
+	}
 
-    mapping(address => UserInfo) public userInfo;
+	bool public distributed = false;
 
-    event TokenStake(address indexed holder, uint256 amount);
-    event TokenRefund(address indexed holder);
-    event TokenClaim(address indexed holder, uint256 amount);
+	TokenInfo public tokenInfo;
+	Timestamps public timestamps;
+	DEXInfo public dexInfo;
 
-    constructor(
-        TokenInfo memory _tokenInfo,
-        Timestamps memory _timestamps,
-        DEXInfo memory _dexInfo
-    ) {
-        tokenInfo = _tokenInfo;
-        dexInfo = _dexInfo;
-        setTimestamps(_timestamps);
-    }
+	mapping(address => UserInfo) public userInfo;
 
-    function setSoftCap(uint256 _softCap) external {
-        tokenInfo.softCap = _softCap;
-    }
+	event TokenStake(address indexed holder, uint256 amount);
+	event TokenRefund(address indexed holder);
+	event TokenClaim(address indexed holder, uint256 amount);
 
-    function setTimestamps(Timestamps memory _timestamp) internal {
-        require(
-            _timestamp.startTimestamp > block.timestamp,
-            "Start timestamp must be more than current timestamp"
-        );
-        require(
-            _timestamp.startTimestamp < _timestamp.endTimestamp,
-            "Start timestamp must be less than end timestamp"
-        );
-        require(
-            _timestamp.endTimestamp < _timestamp.claimTimestamp,
-            "End timestamp must be less than claim timestamp"
-        );
+	constructor(
+		address initialOwner,
+		TokenInfo memory _tokenInfo,
+		Timestamps memory _timestamps,
+		DEXInfo memory _dexInfo
+	) Ownable(initialOwner) {
+		tokenInfo = _tokenInfo;
+		dexInfo = _dexInfo;
+		setTimestamps(_timestamps);
+	}
 
-        timestamps = _timestamp;
-    }
+	function setSoftCap(uint256 _softCap) external {
+		tokenInfo.softCap = _softCap;
+	}
 
-    function stake(uint256 amount) external {
-        require(
-            block.timestamp >= timestamps.startTimestamp,
-            "Project not started"
-        );
-        require(
-            block.timestamp < timestamps.endTimestamp,
-            "Project already ended"
-        );
-        require(
-            amount + tokenInfo.buyTokenSupply <= tokenInfo.hardCap,
-            "Overfilled"
-        );
-        require(amount > 0, "Amount must be greater than zero");
+	function setTimestamps(Timestamps memory _timestamp) public onlyOwner {
+		require(
+			_timestamp.startTimestamp > block.timestamp,
+			"Start timestamp must be more than current timestamp"
+		);
+		require(
+			_timestamp.startTimestamp < _timestamp.endTimestamp,
+			"Start timestamp must be less than end timestamp"
+		);
+		require(
+			_timestamp.endTimestamp < _timestamp.claimTimestamp,
+			"End timestamp must be less than claim timestamp"
+		);
 
-        tokenInfo.buyToken.safeTransferFrom(msg.sender, address(this), amount);
+		timestamps = _timestamp;
+	}
 
-        UserInfo storage newUser = userInfo[msg.sender];
-        newUser.stakedAmount = amount;
-        newUser.hasClaimed = false;
+	function stake(uint256 amount) external {
+		require(
+			block.timestamp >= timestamps.startTimestamp,
+			"Project not started"
+		);
+		require(
+			block.timestamp < timestamps.endTimestamp,
+			"Project already ended"
+		);
+		require(
+			amount + tokenInfo.buyTokenSupply <= tokenInfo.hardCap,
+			"Overfilled"
+		);
+		require(amount > 0, "Amount must be greater than zero");
 
-        tokenInfo.buyTokenSupply = tokenInfo.buyTokenSupply + amount;
+		tokenInfo.buyToken.safeTransferFrom(msg.sender, address(this), amount);
 
-        emit TokenStake(msg.sender, amount);
-    }
+		UserInfo storage newUser = userInfo[msg.sender];
+		newUser.stakedAmount = amount;
+		newUser.hasClaimed = false;
 
-    function refund() external {
-        require(
-            block.timestamp >= timestamps.endTimestamp,
-            "Project not ended yet"
-        );
-        require(
-            tokenInfo.buyTokenSupply < tokenInfo.softCap,
-            "Project is succeed"
-        );
+		tokenInfo.buyTokenSupply = tokenInfo.buyTokenSupply + amount;
 
-        UserInfo storage newUser = userInfo[msg.sender];
+		emit TokenStake(msg.sender, amount);
+	}
 
-        require(newUser.stakedAmount > 0, "You have no staked amount");
+	function refund() external {
+		require(
+			block.timestamp >= timestamps.endTimestamp,
+			"Project not ended yet"
+		);
+		require(
+			tokenInfo.buyTokenSupply < tokenInfo.softCap,
+			"Project is succeed"
+		);
 
-        tokenInfo.buyToken.safeTransfer(msg.sender, newUser.stakedAmount);
+		UserInfo storage newUser = userInfo[msg.sender];
 
-        newUser.stakedAmount = 0;
+		require(newUser.stakedAmount > 0, "You have no staked amount");
 
-        emit TokenRefund(msg.sender);
-    }
+		tokenInfo.buyToken.safeTransfer(msg.sender, newUser.stakedAmount);
 
-    function claim() external {
-        require(
-            block.timestamp >= timestamps.claimTimestamp,
-            "Project not claimable"
-        );
-        require(
-            tokenInfo.buyTokenSupply >= tokenInfo.softCap,
-            "Project is not succeed"
-        );
+		tokenInfo.buyTokenSupply =
+			tokenInfo.buyTokenSupply -
+			newUser.stakedAmount;
 
-        UserInfo storage newUser = userInfo[msg.sender];
+		newUser.stakedAmount = 0;
 
-        require(newUser.stakedAmount > 0, "You have no staked amount");
+		emit TokenRefund(msg.sender);
+	}
 
-        newUser.claimedAmount =
-            newUser.stakedAmount /
-            tokenInfo.rewardTokenPrice;
-        newUser.hasClaimed = true;
+	function claim() external {
+		require(
+			block.timestamp >= timestamps.claimTimestamp,
+			"Project not claimable"
+		);
+		require(
+			tokenInfo.buyTokenSupply >= tokenInfo.softCap,
+			"Project is not succeed"
+		);
 
-        tokenInfo.rewardToken.safeTransfer(msg.sender, newUser.claimedAmount);
+		UserInfo storage newUser = userInfo[msg.sender];
 
-        emit TokenClaim(msg.sender, newUser.claimedAmount);
-    }
+		require(newUser.stakedAmount > 0, "You have no staked amount");
+
+		newUser.claimedAmount =
+			(newUser.stakedAmount * 1e18) /
+			tokenInfo.rewardTokenPrice;
+		newUser.hasClaimed = true;
+
+		tokenInfo.rewardToken.safeTransfer(msg.sender, newUser.claimedAmount);
+
+		emit TokenClaim(msg.sender, newUser.claimedAmount);
+	}
+
+	function withdraw() external onlyOwner {
+		require(
+			block.timestamp >= timestamps.endTimestamp,
+			"Project not ended yet"
+		);
+		require(
+			tokenInfo.buyTokenSupply >= tokenInfo.softCap,
+			"Project is not succeed"
+		);
+		require(!distributed, "Already distributed");
+
+		uint256 rewardTokenAmount = (tokenInfo.buyTokenSupply * 1e18) /
+			tokenInfo.rewardTokenPrice;
+
+		tokenInfo.rewardToken.approve(address(dexInfo.router), rewardTokenAmount);
+		tokenInfo.buyToken.approve(
+			address(dexInfo.router),
+			tokenInfo.buyTokenSupply
+		);
+
+		dexInfo.router.addLiquidity(
+			address(tokenInfo.rewardToken),
+			address(tokenInfo.buyToken),
+			rewardTokenAmount,
+			tokenInfo.buyTokenSupply,
+			0,
+			0,
+			owner(),
+			block.timestamp
+		);
+
+		distributed = true;
+	}
 }
