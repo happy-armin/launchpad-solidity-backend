@@ -25,9 +25,9 @@ contract IDOPool {
     }
 
     struct TokenInfo {
-        address rewardToken;
+        IERC20 rewardToken;
         uint256 rewardTokenPrice;
-        address buyToken;
+        IERC20 buyToken;
         uint256 buyTokenSupply;
         uint256 softCap;
         uint256 hardCap;
@@ -53,9 +53,13 @@ contract IDOPool {
         setTimestamps(_timestamps);
     }
 
+    function setSoftCap(uint256 _softCap) external {
+        tokenInfo.softCap = _softCap;
+    }
+
     function setTimestamps(Timestamps memory _timestamp) internal {
         require(
-            _timestamp.startTimestamp < block.timestamp,
+            _timestamp.startTimestamp > block.timestamp,
             "Start timestamp must be more than current timestamp"
         );
         require(
@@ -85,15 +89,13 @@ contract IDOPool {
         );
         require(amount > 0, "Amount must be greater than zero");
 
-        IERC20(tokenInfo.buyToken).safeTransferFrom(
-            msg.sender,
-            address(this),
-            amount
-        );
+        tokenInfo.buyToken.safeTransferFrom(msg.sender, address(this), amount);
 
         UserInfo storage newUser = userInfo[msg.sender];
         newUser.stakedAmount = amount;
         newUser.hasClaimed = false;
+
+        tokenInfo.buyTokenSupply = tokenInfo.buyTokenSupply + amount;
 
         emit TokenStake(msg.sender, amount);
     }
@@ -112,11 +114,7 @@ contract IDOPool {
 
         require(newUser.stakedAmount > 0, "You have no staked amount");
 
-        IERC20(tokenInfo.buyToken).safeTransferFrom(
-            address(this),
-            msg.sender,
-            newUser.stakedAmount
-        );
+        tokenInfo.buyToken.safeTransfer(msg.sender, newUser.stakedAmount);
 
         newUser.stakedAmount = 0;
 
@@ -142,11 +140,7 @@ contract IDOPool {
             tokenInfo.rewardTokenPrice;
         newUser.hasClaimed = true;
 
-        IERC20(tokenInfo.rewardToken).safeTransferFrom(
-            address(this),
-            msg.sender,
-            newUser.claimedAmount
-        );
+        tokenInfo.rewardToken.safeTransfer(msg.sender, newUser.claimedAmount);
 
         emit TokenClaim(msg.sender, newUser.claimedAmount);
     }
