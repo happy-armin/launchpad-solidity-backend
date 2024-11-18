@@ -45,10 +45,24 @@ contract IDOPool is Ownable {
 	TokenInfo public tokenInfo; // store the token pool info
 	Timestamps public timestamps; // stores the timestamps
 	DEXInfo public dexInfo; // stores the DEX info
+	string public metadataUrl; // store the avatar url
 
 	// Mapping to store user-related information
 	mapping(address => UserInfo) public userInfo;
 
+	event PoolCreated(
+		address indexed holder,
+		address pool,
+		address rewardToken,
+		address buyToken,
+		uint256 price,
+		uint256 softCap,
+		uint256 hardCap,
+		uint256 startTime,
+		uint256 endTime,
+		uint256 claimTime,
+		string ipfsUrl
+	);
 	// Events for token staking, refunding, and claiming
 	event TokenStake(address indexed holder, uint256 amount);
 	event TokenRefund(address indexed holder);
@@ -59,11 +73,27 @@ contract IDOPool is Ownable {
 		address initialOwner,
 		TokenInfo memory _tokenInfo,
 		Timestamps memory _timestamps,
-		DEXInfo memory _dexInfo
+		DEXInfo memory _dexInfo,
+		string memory _metadataUrl
 	) Ownable(initialOwner) {
 		tokenInfo = _tokenInfo;
 		dexInfo = _dexInfo;
+		metadataUrl = _metadataUrl;
 		setTimestamps(_timestamps);
+
+		emit PoolCreated(
+			owner(),
+			address(this),
+			address(tokenInfo.rewardToken),
+			address(tokenInfo.buyToken),
+			tokenInfo.rewardTokenPrice,
+			tokenInfo.softCap,
+			tokenInfo.hardCap,
+			timestamps.startTimestamp,
+			timestamps.endTimestamp,
+			timestamps.claimTimestamp,
+			metadataUrl
+		);
 	}
 
 	// Function to set the soft cap

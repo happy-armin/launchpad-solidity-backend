@@ -108,6 +108,7 @@ describe("IDOPool", () => {
 
 	it("test claim function with no stake", async () => {
 		// Change the soft cap limition
+
 		await idoPool.setSoftCap(ethers.parseEther("100"))
 
 		await expect(idoPool.connect(alice).claim()).to.be.revertedWith("You have no staked amount")
