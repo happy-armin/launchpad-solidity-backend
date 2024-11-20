@@ -36,6 +36,7 @@ contract IDOFactory is Ownable {
 	 * @param account The address of the will-blocked user
 	 */
 	function addToBlock(address account) external onlyOwner {
+		require(blockList[account] != true, "Already added to block list");
 		blockList[account] = true;
 
 		emit addedToBlock(account);
@@ -46,6 +47,10 @@ contract IDOFactory is Ownable {
 	 * @param account The address of the will-unblocked user
 	 */
 	function removeFromBlock(address account) external onlyOwner {
+		require(
+			blockList[account] == true,
+			"Cannot find account in the block list"
+		);
 		blockList[account] = false;
 
 		emit removedFromBlock(account);
@@ -77,7 +82,13 @@ contract IDOFactory is Ownable {
 		tokenInfo.rewardToken = feeToken;
 
 		// Deploy a new IDOP001 contract with the provided parameters
-		IDOPool idoPool = new IDOPool(msg.sender, tokenInfo, timestamp, dexInfo, metadataUrl);
+		IDOPool idoPool = new IDOPool(
+			msg.sender,
+			tokenInfo,
+			timestamp,
+			dexInfo,
+			metadataUrl
+		);
 
 		IERC20(feeToken).transfer(address(idoPool), feeInfo.feeSupply);
 

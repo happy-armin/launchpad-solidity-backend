@@ -107,7 +107,28 @@ contract IDOPool is Ownable {
 	}
 
 	// Function to set the timestamps for the IDO
-	function setTimestamps(Timestamps memory _timestamp) public onlyOwner {
+	function setTimestamps(Timestamps memory _timestamp) internal {
+		// Require that the start timestamp is greater than the current timestamp
+		require(
+			_timestamp.startTimestamp > block.timestamp,
+			"Start timestamp must be more than current timestamp"
+		);
+		// Require that the start timestamp is less than the end timestamp
+		require(
+			_timestamp.startTimestamp < _timestamp.endTimestamp,
+			"Start timestamp must be less than end timestamp"
+		);
+		// Require that the end timestamp is less than the claim timestamp
+		require(
+			_timestamp.endTimestamp < _timestamp.claimTimestamp,
+			"End timestamp must be less than claim timestamp"
+		);
+
+		// Set the timestamps
+		timestamps = _timestamp;
+	}
+
+	function updateTimestamps(Timestamps memory _timestamp) internal onlyOwner {
 		// Require that the start timestamp is greater than the current timestamp
 		require(
 			_timestamp.startTimestamp > block.timestamp,
