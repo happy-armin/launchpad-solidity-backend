@@ -64,9 +64,9 @@ contract IDOPool is Ownable {
 		string ipfsUrl
 	);
 	// Events for token staking, refunding, and claiming
-	event TokenStake(address indexed holder, uint256 amount);
-	event TokenRefund(address indexed holder);
-	event TokenClaim(address indexed holder, uint256 amount);
+	event TokenStake(address indexed holder, address pool, uint256 amount);
+	event TokenRefund(address indexed holder, address pool);
+	event TokenClaim(address indexed holder, address pool, uint256 amount);
 
 	// Constructor that initializes the contract
 	constructor(
@@ -128,7 +128,7 @@ contract IDOPool is Ownable {
 		timestamps = _timestamp;
 	}
 
-	function updateTimestamps(Timestamps memory _timestamp) internal onlyOwner {
+	function updateTimestamps(Timestamps memory _timestamp) external onlyOwner {
 		// Require that the start timestamp is greater than the current timestamp
 		require(
 			_timestamp.startTimestamp > block.timestamp,
@@ -147,6 +147,16 @@ contract IDOPool is Ownable {
 
 		// Set the timestamps
 		timestamps = _timestamp;
+	}
+
+	// getter function for getting pool timestamps
+	function getTimestamps() external view returns (Timestamps memory) {
+		return timestamps;
+	}
+
+	// getter function for getting total staked amount for progress of project
+	function getTotalStakedAmount() external view returns (uint256) {
+		return tokenInfo.buyTokenSupply;
 	}
 
 	// Function to allow users to stake their tokens
@@ -177,14 +187,14 @@ contract IDOPool is Ownable {
 
 		// Update the user's staked amount and claim status
 		UserInfo storage newUser = userInfo[msg.sender];
-		newUser.stakedAmount = amount;
+		newUser.stakedAmount = newUser.stakedAmount + amount;
 		newUser.hasClaimed = false;
 
 		// Update the total buy token supply
 		tokenInfo.buyTokenSupply = tokenInfo.buyTokenSupply + amount;
 
 		// Emit the TokenStake event
-		emit TokenStake(msg.sender, amount);
+		emit TokenStake(msg.sender, address(this), amount);
 	}
 
 	// Function to allow users to refund their staked tokens
@@ -219,7 +229,7 @@ contract IDOPool is Ownable {
 		newUser.stakedAmount = 0;
 
 		// Emit the TokenRefund event
-		emit TokenRefund(msg.sender);
+		emit TokenRefund(msg.sender, address(this));
 	}
 
 	// Function to allow users to claim their rewards
@@ -252,7 +262,7 @@ contract IDOPool is Ownable {
 		tokenInfo.rewardToken.safeTransfer(msg.sender, newUser.claimedAmount);
 
 		// Emit the TokenClaim event
-		emit TokenClaim(msg.sender, newUser.claimedAmount);
+		emit TokenClaim(msg.sender, address(this), newUser.claimedAmount);
 	}
 
 	// Function to allow the owner to withdraw the buy tokens
